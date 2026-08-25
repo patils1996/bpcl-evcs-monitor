@@ -1,0 +1,36 @@
+name: Hourly EVCS Scraper
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # Runs automatically every hour
+  workflow_dispatch:       # Allows manual triggers via GitHub UI
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install playwright openpyxl pandas
+          playwright install chromium
+
+      - name: Run Scraper
+        run: |
+          mkdir -p Uptime
+          python run_once.py
+
+      - name: Commit and Push changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add "Chargers Master.xlsx" dashboard.html Uptime/
+          git commit -m "Auto-update live metrics and spreadsheet [skip ci]" || exit 0
+          git push origin main

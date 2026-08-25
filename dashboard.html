@@ -1,0 +1,1967 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BPCL EVCS Live Status Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- SheetJS for Excel exporting -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            /* Bento Box Orange Theme Brand Colors */
+            --orange-primary: #f97316;
+            --orange-hover: #ea580c;
+            --orange-light: #fff7ed;
+            --orange-border: rgba(249, 115, 22, 0.15);
+            
+            /* Bento Layout Canvas */
+            --bg-canvas: #fcfbfa;
+            --bento-bg: #ffffff;
+            --bento-border: #e2e8f0;
+            --bento-border-focus: #f97316;
+            --text-dark: #0f172a;
+            --text-slate: #475569;
+            --text-muted: #94a3b8;
+            
+            /* Status Indicators */
+            --accent-green: #10b981;
+            --accent-green-bg: rgba(16, 185, 129, 0.08);
+            --accent-green-border: rgba(16, 185, 129, 0.45);
+            --accent-red: #ef4444;
+            --accent-red-bg: rgba(239, 68, 68, 0.08);
+            --accent-red-border: rgba(239, 68, 68, 0.45);
+            
+            --font-main: 'Outfit', sans-serif;
+            --font-display: 'Plus Jakarta Sans', sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-canvas);
+            color: var(--text-dark);
+            font-family: var(--font-main);
+            padding: 2.5rem;
+            min-height: 100vh;
+        }
+
+        /* Bento Container Layout */
+        .bento-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 1.5rem;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        /* Header Card */
+        header.bento-card {
+            grid-column: span 12;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+            border-bottom: 3px solid var(--orange-primary);
+        }
+
+        .header-logo-container {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .bpcl-logo-indicator {
+            width: 14px;
+            height: 44px;
+            background: linear-gradient(to bottom, var(--orange-primary), #fdba74);
+            border-radius: 8px;
+        }
+
+        .header-title h1 {
+            font-family: var(--font-display);
+            font-size: 2.1rem;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            color: var(--text-dark);
+        }
+
+        .header-title p {
+            color: var(--text-slate);
+            margin-top: 0.25rem;
+            font-size: 0.95rem;
+            font-weight: 500;
+        }
+
+        .header-meta {
+            display: flex;
+            align-items: center;
+            gap: 1.25rem;
+        }
+
+        .update-time {
+            font-size: 0.9rem;
+            color: var(--text-slate);
+            background: var(--orange-light);
+            border: 1.5px solid var(--orange-border);
+            padding: 0.6rem 1.2rem;
+            border-radius: 50px;
+            font-weight: 600;
+        }
+
+        .refresh-btn {
+            background: var(--text-dark);
+            color: #ffffff;
+            border: none;
+            padding: 0.75rem 1.75rem;
+            border-radius: 50px;
+            font-weight: 700;
+            font-family: var(--font-main);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .refresh-btn:hover {
+            background-color: var(--orange-primary);
+            box-shadow: 0 4px 12px rgba(249, 115, 22, 0.3);
+            transform: translateY(-1px);
+        }
+
+        /* General Bento Card Styling */
+        .bento-card {
+            background-color: var(--bento-bg);
+            border: 1.5px solid var(--bento-border);
+            border-radius: 1.5rem;
+            padding: 1.75rem;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.02);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .bento-card:hover {
+            transform: translateY(-2px);
+            border-color: var(--bento-border-focus);
+            box-shadow: 0 10px 25px rgba(249, 115, 22, 0.08);
+        }
+
+        /* Stats Cards */
+        .stat-wrapper {
+            grid-column: span 12;
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 1.25rem;
+        }
+
+        @media (max-width: 1024px) {
+            .stat-wrapper {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .stat-wrapper .total { grid-column: span 2; }
+        }
+
+        @media (max-width: 640px) {
+            .stat-wrapper {
+                grid-template-columns: 1fr;
+            }
+            .stat-wrapper .total { grid-column: span 1; }
+        }
+
+        .bento-stat-card {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-slate);
+            margin-bottom: 0.75rem;
+            font-weight: 700;
+        }
+
+        .stat-value {
+            font-family: var(--font-display);
+            font-size: 2.5rem;
+            font-weight: 800;
+            line-height: 1;
+            color: var(--text-dark);
+            margin-bottom: 0.5rem;
+        }
+
+        /* Bento Orange Theme Value Colors */
+        .total .stat-value { color: var(--orange-primary); }
+        .online .stat-value { color: var(--accent-green); }
+        .offline .stat-value { color: var(--accent-red); }
+        .fame .stat-value { color: var(--text-dark); }
+        .non-fame .stat-value { color: var(--text-slate); }
+
+        .stat-subtext {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        /* Charts Row Bento - Divided equally into 3 columns (span 4 each) */
+        .chart-ratio-card {
+            grid-column: span 4;
+        }
+
+        .chart-eo-card {
+            grid-column: span 4;
+        }
+
+        .chart-so-card {
+            grid-column: span 4;
+        }
+
+        @media (max-width: 1024px) {
+            .chart-ratio-card, .chart-eo-card, .chart-so-card {
+                grid-column: span 12;
+            }
+        }
+
+        .bento-card-title {
+            font-family: var(--font-display);
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            color: var(--text-dark);
+            border-left: 4px solid var(--orange-primary);
+            padding-left: 0.6rem;
+        }
+
+        /* Expanded chart height for better visibility */
+        .chart-wrapper {
+            position: relative;
+            height: 380px;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Table Card Bento */
+        .table-card {
+            grid-column: span 12;
+        }
+
+        /* Table controls & filter bento styling */
+        .table-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.75rem;
+            flex-wrap: wrap;
+            gap: 1.25rem;
+        }
+
+        .search-wrapper {
+            position: relative;
+            flex-grow: 1;
+            max-width: 400px;
+        }
+
+        .search-input {
+            width: 100%;
+            background-color: var(--bg-canvas);
+            border: 1.5px solid var(--bento-border);
+            color: var(--text-dark);
+            padding: 0.75rem 1rem 0.75rem 2.8rem;
+            border-radius: 50px;
+            outline: none;
+            font-family: var(--font-main);
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .search-input:focus {
+            border-color: var(--orange-primary);
+            background-color: #ffffff;
+            box-shadow: 0 0 10px rgba(249, 115, 22, 0.1);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 1.1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-slate);
+            pointer-events: none;
+            width: 18px;
+            height: 18px;
+        }
+
+        .filter-group {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .filter-select {
+            background-color: var(--bg-canvas);
+            border: 1.5px solid var(--bento-border);
+            color: var(--text-dark);
+            padding: 0.75rem 1.4rem;
+            border-radius: 50px;
+            outline: none;
+            cursor: pointer;
+            font-family: var(--font-main);
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .filter-select:focus {
+            border-color: var(--orange-primary);
+            background-color: #ffffff;
+        }
+
+        /* Download pill bento button */
+        .download-btn {
+            background-color: var(--orange-primary);
+            color: #ffffff;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 50px;
+            font-weight: 700;
+            font-family: var(--font-main);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            box-shadow: 0 4px 10px rgba(249, 115, 22, 0.2);
+        }
+
+        .download-btn:hover {
+            background-color: var(--orange-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 15px rgba(249, 115, 22, 0.35);
+        }
+
+        /* Grid Table details */
+        .table-wrapper {
+            overflow-x: auto;
+            max-height: 520px;
+            border: 1.5px solid var(--bento-border);
+            border-radius: 1rem;
+            background: #ffffff;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 0.95rem;
+        }
+
+        th {
+            background-color: var(--orange-light);
+            color: var(--text-dark);
+            padding: 1.1rem;
+            font-weight: 700;
+            border-bottom: 1.5px solid var(--bento-border);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        td {
+            padding: 1.1rem;
+            border-bottom: 1.5px solid var(--bento-border);
+            color: var(--text-slate);
+            font-weight: 500;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover td {
+            background-color: var(--orange-light);
+        }
+
+        /* Status Badge style */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            padding: 0.45rem 1.4rem;
+            border-radius: 24px;
+            font-size: 0.9rem;
+            text-align: center;
+            min-width: 110px;
+        }
+
+        .status-badge.online {
+            background-color: var(--accent-green-bg);
+            color: #10b981;
+            border: 1.5px solid var(--accent-green-border);
+        }
+
+        .status-badge.offline {
+            background-color: var(--accent-red-bg);
+            color: #ef4444;
+            border: 1.5px solid var(--accent-red-border);
+        }
+
+        .status-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 0.5rem;
+            flex-shrink: 0;
+        }
+
+        .status-badge.online .status-dot {
+            background-color: var(--accent-green);
+            box-shadow: 0 0 10px var(--accent-green), 0 0 5px var(--accent-green);
+        }
+        .status-badge.offline .status-dot {
+            background-color: var(--accent-red);
+            box-shadow: 0 0 10px var(--accent-red), 0 0 5px var(--accent-red);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="bento-grid">
+        <!-- Header Card Bento -->
+        <header class="bento-card">
+            <div class="header-logo-container">
+                <div class="bpcl-logo-indicator"></div>
+                <div class="header-title">
+                    <h1>BPCL EVCS Live Status Dashboard</h1>
+                    <p>Hourly monitored charger status with automated matching</p>
+                </div>
+            </div>
+            <div class="header-meta">
+                <div class="update-time" id="last-updated">Last Updated: Loading...</div>
+                <button class="refresh-btn" onclick="window.location.reload()">Refresh Page</button>
+            </div>
+        </header>
+
+        <!-- Stats Section Bento wrapper -->
+        <div class="stat-wrapper">
+            <div class="bento-card bento-stat-card total">
+                <div class="stat-label">Total Chargers</div>
+                <div class="stat-value" id="stat-total">0</div>
+                <div class="stat-subtext" id="stat-file-name">Source: Loading...</div>
+            </div>
+            <div class="bento-card bento-stat-card online">
+                <div class="stat-label">Online Chargers</div>
+                <div class="stat-value" id="stat-online">0</div>
+                <div class="stat-subtext" id="stat-online-pct">0% of total</div>
+            </div>
+            <div class="bento-card bento-stat-card offline">
+                <div class="stat-label">Offline Chargers</div>
+                <div class="stat-value" id="stat-offline">0</div>
+                <div class="stat-subtext" id="stat-offline-pct">0% of total</div>
+            </div>
+            <div class="bento-card bento-stat-card fame">
+                <div class="stat-label">FAME Chargers</div>
+                <div class="stat-value" id="stat-fame">0</div>
+                <div class="stat-subtext" id="stat-fame-online">0 Online / 0 Offline</div>
+            </div>
+            <div class="bento-card bento-stat-card non-fame">
+                <div class="stat-label">NON FAME Chargers</div>
+                <div class="stat-value" id="stat-non-fame">0</div>
+                <div class="stat-subtext" id="stat-non-fame-online">0 Online / 0 Offline</div>
+            </div>
+        </div>
+
+        <!-- Charts Bento Cards -->
+        <div class="bento-card chart-ratio-card">
+            <div class="bento-card-title">Overall Online Ratio</div>
+            <div class="chart-wrapper">
+                <canvas id="ratioChart"></canvas>
+            </div>
+        </div>
+        <div class="bento-card chart-eo-card">
+            <div class="bento-card-title">Territory EO</div>
+            <div class="chart-wrapper">
+                <canvas id="zonalChart"></canvas>
+            </div>
+        </div>
+        <div class="bento-card chart-so-card">
+            <div class="bento-card-title">Sales Officers</div>
+            <div class="chart-wrapper">
+                <canvas id="salesOfficerChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Table Card Bento -->
+        <div class="bento-card table-card">
+            <div class="bento-card-title">Chargers Status List</div>
+            <div class="table-controls">
+                <div class="search-wrapper">
+                    <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <input type="text" id="search-input" class="search-input" placeholder="Search by Station Name, OCPP ID, Sales Officer, City...">
+                </div>
+                <div class="filter-group">
+                    <select id="filter-status" class="filter-select">
+                        <option value="all">All Statuses</option>
+                        <option value="Online">Online</option>
+                        <option value="Offline">Offline</option>
+                    </select>
+                    <select id="filter-lead" class="filter-select">
+                        <option value="all">All Territory EOs</option>
+                    </select>
+                    <select id="filter-so" class="filter-select">
+                        <option value="all">All Sales Officers</option>
+                    </select>
+                    <select id="filter-type" class="filter-select">
+                        <option value="all">All Types</option>
+                        <option value="FAME">FAME</option>
+                        <option value="NON FAME">NON FAME</option>
+                    </select>
+                    <button class="download-btn" onclick="downloadExcel()">
+                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                            <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+                            <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
+                        </svg>
+                        Download Excel
+                    </button>
+                </div>
+            </div>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 50px;">Sl.</th>
+                            <th>Station Name</th>
+                            <th>BL Code</th>
+                            <th>OCPP ID</th>
+                            <th>Territory EO</th>
+                            <th>Sales Officer</th>
+                            <th>Power Rating</th>
+                            <th>City / State</th>
+                            <th>Type</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body">
+                        <tr>
+                            <td colspan="10" style="text-align: center; padding: 2rem; color: var(--text-muted);">Loading charger data...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Injection Point -->
+    <script id="dashboard-data" type="application/json">
+{
+    "last_updated": "2026-08-21 18:07:57",
+    "file_name": "Chargers Master.xlsx",
+    "chargers": [
+        {
+            "name": "M/s. H OBHAN AUTOMOBILES",
+            "station": "M/s. H OBHAN AUTOMOBILES",
+            "bl_code": 2006004,
+            "eo": "Bhupesh Bajiya",
+            "so": "Saigiridhar K",
+            "ocpp": "BP-ST-DC-60-KA-01275",
+            "city": "Dharwad",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Online"
+        },
+        {
+            "name": "2025285 MAHALAXMI FUEL CENTER",
+            "station": "MAHALAXMI FUEL CENTER",
+            "bl_code": 2025285,
+            "eo": "Bhupesh Bajiya",
+            "so": "Saigiridhar K",
+            "ocpp": "BP-LU-DC-60-KA-01011",
+            "city": "Dharwad",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "Raghavendra Petroleums",
+            "station": "Raghavendra Petroleums",
+            "bl_code": 2026827,
+            "eo": "Vasa Nagamallik",
+            "so": "Jaydip C",
+            "ocpp": "BP-ST-DC-60-KA-023416",
+            "city": "Hidkal",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "Shree Holemma petroleum",
+            "station": "Shree Holemma petroleum ",
+            "bl_code": 2027366,
+            "eo": "Vasa Nagamallik",
+            "so": "Vinit S",
+            "ocpp": "BP-ST-DC-60-KA-01683",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Online"
+        },
+        {
+            "name": "MAHALAXMI PETROLEUM.",
+            "station": "MAHALAXMI PETROLEUM.",
+            "bl_code": 2029372,
+            "eo": "Vasa Nagamallik",
+            "so": "Vinit S",
+            "ocpp": "BP-ST-DC-60-KA-01478",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "B V TALATHI",
+            "station": "B V TALATHI",
+            "bl_code": 2006021,
+            "eo": "Sourabh Paul",
+            "so": "Spandan P",
+            "ocpp": "BP-ST-DC-60-KA-02614",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "R B KITTURKAR HONNIHALLI",
+            "station": "R B KITTURKAR HONNIHALLI",
+            "bl_code": 2006018,
+            "eo": "Vasa Nagamallik",
+            "so": "Vinit S",
+            "ocpp": "BP-ST-DC-60-KA-01470",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "LAXMI PETROLEUM.",
+            "station": "SHRI LAKSHMI PETROLEUM",
+            "bl_code": 2006057,
+            "eo": "Sourabh Paul",
+            "so": "Jaydip C",
+            "ocpp": "BP-ST-DC-60-KA-02471",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Online"
+        },
+        {
+            "name": "M/s. MAGAVI CITY FUELS",
+            "station": "MAGAVI CITY FUELS",
+            "bl_code": 2006044,
+            "eo": "Bhupesh Bajiya",
+            "so": "Muthukumar M",
+            "ocpp": "BP-ST-DC-60-KA-01999",
+            "city": "Haveri",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Online"
+        },
+        {
+            "name": "GAJANAN PETROL PUMP",
+            "station": "GAJANAN PETROL PUMP",
+            "bl_code": 2006051,
+            "eo": "Vasa Nagamallik",
+            "so": "Vinit S",
+            "ocpp": "BP-ST-DC-60-KA-01481",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "BELGAUM SUGARS PRIVATE LIMITED",
+            "station": "BELGAUM SUGARS PRIVATE LIMITED",
+            "bl_code": 2024993,
+            "eo": "Vasa Nagamallik",
+            "so": "Vinit S",
+            "ocpp": "BP-ST-DC-60-KA-02410",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "M/s. SHREE JAGADGURU TONTADARYA PRASAD",
+            "station": "SHREE JAGADGURU TONTADARYA PRASAD N",
+            "bl_code": 2006055,
+            "eo": "Bhupesh Bajiya",
+            "so": "Muthukumar M",
+            "ocpp": "BP-ST-DC-60-KA-01989",
+            "city": "Gadag",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Online"
+        },
+        {
+            "name": "AVADHUT PETROLEUM",
+            "station": "AVADHUT PETROLEUM",
+            "bl_code": 2015295,
+            "eo": "Vasa Nagamallik",
+            "so": "Vinit S",
+            "ocpp": "BP-ST-DC-60-KA-01723",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "BALAJI PETROLEUM",
+            "station": "BALAJI PETROLEUM",
+            "bl_code": 2025296,
+            "eo": "Sourabh Paul",
+            "so": "Spandan P",
+            "ocpp": "BP-ST-DC-60-KA-01466",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Online"
+        },
+        {
+            "name": "M/s. NIMBA CITY PETROLEUM",
+            "station": "NIMBA CITY PETROLEUM",
+            "bl_code": 2006173,
+            "eo": "Bhupesh Bajiya",
+            "so": "Muthukumar M",
+            "ocpp": "BP-ST-DC-60-KA-01994",
+            "city": "Haveri",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "A B PARVAT RAO PETROLEUM",
+            "station": "A B PARVAT RAO PETROLEUM",
+            "bl_code": 2006082,
+            "eo": "Vasa Nagamallik",
+            "so": "Vinit S",
+            "ocpp": "BP-ST-DC-60-KA-01655",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Online"
+        },
+        {
+            "name": "M/s. SG PATIL & CO",
+            "station": "SG PATIL & CO",
+            "bl_code": 2006023,
+            "eo": "Bhupesh Bajiya",
+            "so": "Muthukumar M",
+            "ocpp": "BP-ST-DC-60-KA-01270",
+            "city": "Haveri",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Online"
+        },
+        {
+            "name": "DANESHWARI PETROLEUM",
+            "station": "DANESHWARI PETROLEUM",
+            "bl_code": 2013659,
+            "eo": "Vasa Nagamallik",
+            "so": "Vinit S",
+            "ocpp": "BP-ST-DC-60-KA-01686",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "MAHALASA FILLING STN",
+            "station": "MAHALASA FILLING STN",
+            "bl_code": 2023617,
+            "eo": "Vasa Nagamallik",
+            "so": "Vinit S",
+            "ocpp": "BP-ST-DC-60-KA-02404",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Online"
+        },
+        {
+            "name": "C.M. BENNI",
+            "station": "C.M. BENNI",
+            "bl_code": 2006005,
+            "eo": "Bhupesh Bajiya",
+            "so": "Muthukumar M",
+            "ocpp": "BP-LU-DC-60-KA-00944",
+            "city": "Savanur",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Online"
+        },
+        {
+            "name": "NETRAVATHI SERVICE STATION",
+            "station": "NETRAVATHI SERVICE STATION",
+            "bl_code": 2006066,
+            "eo": "Bhupesh Bajiya",
+            "so": "Muthukumar M",
+            "ocpp": "BP-LU-DC-60-KA-00815",
+            "city": "Byadgi",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Online"
+        },
+        {
+            "name": "NISARGA PRIYA PUMP",
+            "station": "NISARGA PRIYA PUMP",
+            "bl_code": 2018055,
+            "eo": "Sourabh Paul",
+            "so": "Spandan P",
+            "ocpp": "BP-LU-DC-60-KA-00814",
+            "city": "Bagalkot",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "ROHIT PETROLEUMS",
+            "station": "ROHIT PETROLEUMS",
+            "bl_code": 2011990,
+            "eo": "Vasa Nagamallik",
+            "so": "Vinit S",
+            "ocpp": "BP-LU-DC-60-KA-00813",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Online"
+        },
+        {
+            "name": "SHREYA AGENCY",
+            "station": "SHREYA AGENCY",
+            "bl_code": 2005986,
+            "eo": "Bhupesh Bajiya",
+            "so": "Muthukumar M",
+            "ocpp": "BP-LU-DC-60-KA-00812",
+            "city": "Mundargi",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "T. R. ASSOCIATES",
+            "station": "T. R. ASSOCIATES",
+            "bl_code": 2025148,
+            "eo": "Vasa Nagamallik",
+            "so": "Vinit S",
+            "ocpp": "BP-LU-DC-60-KA-00811",
+            "city": "Hukeri",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Online"
+        },
+        {
+            "name": "SHREE RENUKA DEVI PETROLEUM",
+            "station": "SHREE RENUKA DEVI PETROLEUM",
+            "bl_code": 2006139,
+            "eo": "Vasa Nagamallik",
+            "so": "Jaydip C",
+            "ocpp": "BP-LU-DC-60-KA-00585",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Online"
+        },
+        {
+            "name": "DEVASHISH PETROLEUM",
+            "station": "DEVASHISH PETROLEUM",
+            "bl_code": 2017345,
+            "eo": "Vasa Nagamallik",
+            "so": "Vinit S",
+            "ocpp": "BP-ST-DC-60-TN-02583",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Online"
+        },
+        {
+            "name": "V V VARDE",
+            "station": "V V VARDE",
+            "bl_code": 2006029,
+            "eo": "Vasa Nagamallik",
+            "so": "Jaydip C",
+            "ocpp": "BP-ST-DC-60-KA-01685",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "JAI HANUMAN PETROLEUM",
+            "station": "JAI HANUMAN PETROLEUM",
+            "bl_code": 2006072,
+            "eo": "Vasa Nagamallik",
+            "so": "Vinit S",
+            "ocpp": "BP-ST-DC-60-KA-02461",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Online"
+        },
+        {
+            "name": "M/s. RH PETROLEUM",
+            "station": "M/s. R.H. PETROLEUM",
+            "bl_code": 2024703,
+            "eo": "Bhupesh Bajiya",
+            "so": "Muthukumar M",
+            "ocpp": "BP-ST-DC-60-KA-01997",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Online"
+        },
+        {
+            "name": "M/s. VEERABHADRESWAR PETROLEUM SERVICES",
+            "station": "M/s. VEERABHADRESWAR PETROLEUM SERVICES",
+            "bl_code": 2006119,
+            "eo": "Bhupesh Bajiya",
+            "so": "Muthukumar M",
+            "ocpp": "BP-ST-DC-60-KA-01229",
+            "city": "Haveri",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "2024578 - SRI SAI FUEL STATION",
+            "station": "SRI SAI FUEL STATION",
+            "bl_code": 2024578,
+            "eo": "Bhupesh Bajiya",
+            "so": "Muthukumar M",
+            "ocpp": "BP-LU-DC-60-KA-00587",
+            "city": "Haveri",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "2021746-JOSHI PETROLEUMS",
+            "station": "JOSHI PETROLEUMS",
+            "bl_code": 2021746,
+            "eo": "Vasa Nagamallik",
+            "so": "Vinit S",
+            "ocpp": "BP-LU-DC-60-KA-00586",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Online"
+        },
+        {
+            "name": "REVANSIDDESHWAR PETROLEUM",
+            "station": "REVANSIDDESHWAR PETROLEUM",
+            "bl_code": 2006750,
+            "eo": "Vasa Nagamallik",
+            "so": "Jaydip C",
+            "ocpp": "BP-ST-DC-30-KA-06026",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "30.0 kW",
+            "type": "NON FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "P M KARIKAZI",
+            "station": "P M KARIKAZI",
+            "bl_code": 2006047,
+            "eo": "Vasa Nagamallik",
+            "so": "Vinit S",
+            "ocpp": "BP-ST-DC-30-KA-06024",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "30.0 kW",
+            "type": "NON FAME",
+            "status": "Online"
+        },
+        {
+            "name": "DESHAPNDE PETROLEUM",
+            "station": "DESHAPNDE PETROLEUM",
+            "bl_code": 2006056,
+            "eo": "Bhupesh Bajiya",
+            "so": "Saigiridhar K",
+            "ocpp": "BP-ST-DC-60-KA-00006",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "Channagireshwar Petroleum",
+            "station": "Channagireshwar Petroleum",
+            "bl_code": 2006025,
+            "eo": "Sourabh Paul",
+            "so": "Spandan P",
+            "ocpp": "BP-ST-DC-60-KA-02441",
+            "city": "Bagalkot",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Online"
+        },
+        {
+            "name": "SHRINIVAS PETROLUM",
+            "station": "SHRINIVAS PETROLUM",
+            "bl_code": 2006142,
+            "eo": "Sourabh Paul",
+            "so": "Spandan P",
+            "ocpp": "BP-ST-DC-60-KA-001",
+            "city": "Bagalkot",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Online"
+        },
+        {
+            "name": "S S MELLIGERI",
+            "station": "S S MELLIGERI",
+            "bl_code": 2006024,
+            "eo": "Sourabh Paul",
+            "so": "Spandan P",
+            "ocpp": "BP-ST-DC-60-KA-02409",
+            "city": "Bagalkot",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Online"
+        },
+        {
+            "name": "S C PANCHKATI MUTT PETROLEUM",
+            "station": "S C PANCHKATI MUTT PETROLEUM",
+            "bl_code": 2006112,
+            "eo": "Sourabh Paul",
+            "so": "Jaydip C",
+            "ocpp": "BP-ST-DC-60-KA-02406",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Online"
+        },
+        {
+            "name": "SHSHAPUR PETROLEUM",
+            "station": "SHAHAPUR PETROLEUM",
+            "bl_code": 2006110,
+            "eo": "Sourabh Paul",
+            "so": "Jaydip C",
+            "ocpp": "BP-ST-DC-60-KA-02403",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "VANASHREE PETROLEUM",
+            "station": "VANASHREE PETROLEUM",
+            "bl_code": 2006113,
+            "eo": "Sourabh Paul",
+            "so": "Spandan P",
+            "ocpp": "BP-ST-DC-60-KA-02407",
+            "city": "Bagalkot",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Online"
+        },
+        {
+            "name": "M/s. BOLANNAVAR PETROLEUMS",
+            "station": "M/s. BOLANNAVAR PETROLEUMS",
+            "bl_code": 2014809,
+            "eo": "Sourabh Paul",
+            "so": "Jaydip C",
+            "ocpp": "BP-ST-DC-60-KA-02007",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Online"
+        },
+        {
+            "name": "M/s. ISHWAR PETROLEUM",
+            "station": "M/s. ISHWAR PETROLEUM",
+            "bl_code": 2005982,
+            "eo": "Bhupesh Bajiya",
+            "so": "Muthukumar M",
+            "ocpp": "BP-ST-DC-60-KA-01995",
+            "city": "Gadag",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Online"
+        },
+        {
+            "name": "M/s. PAWAR PETROLEUM",
+            "station": "M/s. PAWAR PETROLEUM",
+            "bl_code": 2012496,
+            "eo": "Bhupesh Bajiya",
+            "so": "Saigiridhar K",
+            "ocpp": "BP-ST-DC-60-KA005",
+            "city": "Dharwar",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Online"
+        },
+        {
+            "name": "M/s. ALIYA PETROLEUMS",
+            "station": "M/s. ALIYA PETROLEUMS",
+            "bl_code": 2006115,
+            "eo": "Bhupesh Bajiya",
+            "so": "Saigiridhar K",
+            "ocpp": "BP-ST-DC-60-KA-01682",
+            "city": "Dharwar",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "M/s. PARIMALA ENTERPRISES",
+            "station": "M/s. PARIMALA ENTERPRISES",
+            "bl_code": 2005983,
+            "eo": "Bhupesh Bajiya",
+            "so": "Muthukumar M",
+            "ocpp": "BP-ST-DC-60-KA-01120",
+            "city": "Haveri",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "SHIVGEET PETROLEUM",
+            "station": "SHIVGEET PETROLEUM",
+            "bl_code": 2006123,
+            "eo": "Vasa Nagamallik",
+            "so": "Vinit S",
+            "ocpp": "BP-ST-DC-60-KA-02584",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Online"
+        },
+        {
+            "name": "KIRAN AUTO",
+            "station": "KIRAN AUTO",
+            "bl_code": 2006094,
+            "eo": "Vasa Nagamallik",
+            "so": "Jaydip C",
+            "ocpp": "BP-ST-DC-60-KA-02402",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Online"
+        },
+        {
+            "name": "BARDE ROADLINES",
+            "station": "BARDE ROADLINES",
+            "bl_code": 2006037,
+            "eo": "Vasa Nagamallik",
+            "so": "Vinit S",
+            "ocpp": "BP-ST-DC-60-KA-01652",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Online"
+        },
+        {
+            "name": "M G HINDALGEKAR PETROLEUM",
+            "station": "M G HINDALGEKAR PETROLEUM",
+            "bl_code": 2018322,
+            "eo": "Vasa Nagamallik",
+            "so": "Vinit S",
+            "ocpp": "23R2346E01A1KV0164",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "BUTALI PETROLEUM EVDC",
+            "station": "BUTALI PETROLEUM",
+            "bl_code": 2013805,
+            "eo": "Sourabh Paul",
+            "so": "Spandan P",
+            "ocpp": "BP-ST-DC-60-KA-02411",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Online"
+        },
+        {
+            "name": "SAMART FUEL POINT",
+            "station": "SAMART FUEL POINT",
+            "bl_code": 2016649,
+            "eo": "Sourabh Paul",
+            "so": "Spandan P",
+            "ocpp": "BP-ST-DC-60-KA-01668",
+            "city": "Bagalkot",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "B P BELGAUM",
+            "station": "B P BELGAUM",
+            "bl_code": 2016186,
+            "eo": "Vasa Nagamallik",
+            "so": "Vinit S",
+            "ocpp": "BP-ST-DC-60-KA-01689",
+            "city": "Gadag",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Online"
+        },
+        {
+            "name": "BASAVESHAR PETROLEUM ",
+            "station": "BASAVESHAR PETROLEUM ",
+            "bl_code": 2020956,
+            "eo": "Sourabh Paul",
+            "so": "Spandan P",
+            "ocpp": "BP-ST-DC-30-KA-01794",
+            "city": "Bagalkot",
+            "state": "Karnataka",
+            "power": "30.0 kW",
+            "type": "NON FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "BP KESHWAPUR",
+            "station": "BP KESHWAPUR",
+            "bl_code": 2016175,
+            "eo": "Bhupesh Bajiya",
+            "so": "Saigiridhar K",
+            "ocpp": "BP-ST-DC-30-KA-01786_Relocated",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "30.0 kW",
+            "type": "NON FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "LAXMI NARASIMHA AGENCIES_EV_DC",
+            "station": "LAXMI NARASIMHA AGENCIES ",
+            "bl_code": 2006182,
+            "eo": "Sourabh Paul",
+            "so": "Spandan P",
+            "ocpp": "BP-ST-DC-30-KA-01785",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "30.0 kW",
+            "type": "NON FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "GOUTHAM PETROLEUM_EV_DC",
+            "station": "GOUTHAM PETROLEUM",
+            "bl_code": 2016367,
+            "eo": "Sourabh Paul",
+            "so": "Spandan P",
+            "ocpp": "BP-ST-DC-30-KA-01793",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "30.0 kW",
+            "type": "NON FAME",
+            "status": "Online"
+        },
+        {
+            "name": "2018483-SHRI MAHALAXMI PETROLEUMS- 1",
+            "station": "SHRI MAHALAXMI PETROLEUMS- 1",
+            "bl_code": 2018483,
+            "eo": "Bhupesh Bajiya",
+            "so": "Saigiridhar K",
+            "ocpp": "BP-ST-DC-30-KA-ION-00635",
+            "city": "Kalghatgi",
+            "state": "Karnataka",
+            "power": "30.0 kW",
+            "type": "NON FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "2018205-PENDARI PETROLEUM",
+            "station": "PENDARI PETROLEUM",
+            "bl_code": 2018205,
+            "eo": "Sourabh Paul",
+            "so": "Spandan P",
+            "ocpp": "BP-ST-DC-30-KA-ION-00626",
+            "city": "Mahalingpur",
+            "state": "Karnataka",
+            "power": "30.0 kW",
+            "type": "NON FAME",
+            "status": "Online"
+        },
+        {
+            "name": "2015948-VIJAYALAXMI PETROLEUM",
+            "station": "VIJAYALAXMI PETROLEUM",
+            "bl_code": 2015948,
+            "eo": "Sourabh Paul",
+            "so": "Spandan P",
+            "ocpp": "BP-ST-DC-30-KA-ION-00590",
+            "city": "Jamkhandi",
+            "state": "Karnataka",
+            "power": "30.0 kW",
+            "type": "NON FAME",
+            "status": "Online"
+        },
+        {
+            "name": "R P GULMI PETROLEUM",
+            "station": "R P GULMI PETROLEUM",
+            "bl_code": 2013831,
+            "eo": "Bhupesh Bajiya",
+            "so": "Muthukumar M",
+            "ocpp": "BP-ST-DC-30-KA-ION-00522",
+            "city": "Haveri",
+            "state": "Karnataka",
+            "power": "30.0 kW",
+            "type": "NON FAME",
+            "status": "Online"
+        },
+        {
+            "name": "2012602-JAYAM PETROLEUM",
+            "station": "JAYAM PETROLEUM",
+            "bl_code": 2012602,
+            "eo": "Bhupesh Bajiya",
+            "so": "Saigiridhar K",
+            "ocpp": "BP-ST-DC-30-KA-ION-00467",
+            "city": "Hubli",
+            "state": "Karnataka",
+            "power": "30.0 kW",
+            "type": "NON FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "2020609-NAMAKKAL GANESH FUELS",
+            "station": "NAMAKKAL GANESH FUELS",
+            "bl_code": 2020609,
+            "eo": "Bhupesh Bajiya",
+            "so": "Saigiridhar K",
+            "ocpp": "BP-ST-DC-30-KA-ION-00670",
+            "city": "Bilgi",
+            "state": "Karnataka",
+            "power": "30.0 kW",
+            "type": "NON FAME",
+            "status": "Online"
+        },
+        {
+            "name": "2018311-SHRI MAHALINGESHWAR PETROLEUMS",
+            "station": "SHRI MAHALINGESHWAR PETROLEUMS",
+            "bl_code": 2018311,
+            "eo": "Vasa Nagamallik",
+            "so": "Vinit S",
+            "ocpp": "BP-ST-DC-30-KA-ION-00632",
+            "city": "Bilgi",
+            "state": "Karnataka",
+            "power": "30.0 kW",
+            "type": "NON FAME",
+            "status": "Online"
+        },
+        {
+            "name": "2015464-RANVEER PETROLEUMS",
+            "station": "RANVEER PETROLEUMS",
+            "bl_code": 2015464,
+            "eo": "Vasa Nagamallik",
+            "so": "Vinit S",
+            "ocpp": "BP-ST-DC-30-KA-ION-00572",
+            "city": "Bilgi",
+            "state": "Karnataka",
+            "power": "30.0 kW",
+            "type": "NON FAME",
+            "status": "Online"
+        },
+        {
+            "name": "2006105-GORAL PETROLEUM",
+            "station": "GORAL PETROLEUM",
+            "bl_code": 2006105,
+            "eo": "Vasa Nagamallik",
+            "so": "Vinit S",
+            "ocpp": "BP-ST-DC-30-KA-ION-00228",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "30.0 kW",
+            "type": "NON FAME",
+            "status": "Online"
+        },
+        {
+            "name": "2006079-SHIVAM PETROLEUM",
+            "station": "SHIVAM PETROLEUM",
+            "bl_code": 2006079,
+            "eo": "Bhupesh Bajiya",
+            "so": "Muthukumar M",
+            "ocpp": "BP-ST-DC-30-KA-ION-00226",
+            "city": "Gadag",
+            "state": "Karnataka",
+            "power": "30.0 kW",
+            "type": "NON FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "2006076-SRI SAI PETROLEUM_EV_DC",
+            "station": "SRI SAI PETROLEUM",
+            "bl_code": 2006076,
+            "eo": "Bhupesh Bajiya",
+            "so": "Saigiridhar K",
+            "ocpp": "BP-ST-DC-30-KA-ION-01413",
+            "city": "Hubli",
+            "state": "Karnataka",
+            "power": "30.0 kW",
+            "type": "NON FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "2006035-AZAD PETROL & DIESEL OIL DEALERS",
+            "station": "AZAD PETROL & DIESEL OIL DEALERS",
+            "bl_code": 2006035,
+            "eo": "Sourabh Paul",
+            "so": "Spandan P",
+            "ocpp": "BP-ST-DC-30-KA-ION-00221",
+            "city": "Ilkal",
+            "state": "Karnataka",
+            "power": "30.0 kW",
+            "type": "NON FAME",
+            "status": "Online"
+        },
+        {
+            "name": "2012365-SHANMUKH PETROLEUM",
+            "station": "SHANMUKH PETROLEUM",
+            "bl_code": 2012365,
+            "eo": "Bhupesh Bajiya",
+            "so": "Saigiridhar K",
+            "ocpp": "BP-ST-DC-30-KA-ION-00461",
+            "city": "Bilgi",
+            "state": "Karnataka",
+            "power": "30.0 kW",
+            "type": "NON FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "2006120-BP RANEBENNUR II",
+            "station": "BP RANEBENNUR II",
+            "bl_code": 2006120,
+            "eo": "Bhupesh Bajiya",
+            "so": "Muthukumar M",
+            "ocpp": "BP-ST-DC-30-KA-ION-00229",
+            "city": "Bilgi",
+            "state": "Karnataka",
+            "power": "30.0 kW",
+            "type": "NON FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "2006080-BP-KOGNOLLI",
+            "station": "BP-KOGNOLLI",
+            "bl_code": 2006080,
+            "eo": "Vasa Nagamallik",
+            "so": "Vinit S",
+            "ocpp": "BP-ST-DC-30-KA-ION-00227",
+            "city": "Bilgi",
+            "state": "Karnataka",
+            "power": "30.0 kW",
+            "type": "NON FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "2006071-BP-RANEBENNUR - I",
+            "station": "BP-RANEBENNUR - I",
+            "bl_code": 2006071,
+            "eo": "Bhupesh Bajiya",
+            "so": "Muthukumar M",
+            "ocpp": "BP-ST-DC-30-KA-ION-00224",
+            "city": "Haveri",
+            "state": "Karnataka",
+            "power": "30.0 kW",
+            "type": "NON FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "2006042-BP-KOTUR-1",
+            "station": "BP-KOTUR-1",
+            "bl_code": 2006042,
+            "eo": "Bhupesh Bajiya",
+            "so": "Saigiridhar K",
+            "ocpp": "BP-ST-DC-30-KA-ION-00222",
+            "city": "Bilgi",
+            "state": "Karnataka",
+            "power": "30.0 kW",
+            "type": "NON FAME",
+            "status": "Online"
+        },
+        {
+            "name": "2005984-BP-KOTUR-2",
+            "station": "BP-KOTUR-2",
+            "bl_code": 2005984,
+            "eo": "Bhupesh Bajiya",
+            "so": "Saigiridhar K",
+            "ocpp": "BP-ST-DC-30-KA-ION-00219",
+            "city": "Bilgi",
+            "state": "Karnataka",
+            "power": "30.0 kW",
+            "type": "NON FAME",
+            "status": "Offline"
+        },
+        {
+            "name": "2006065-RAMESHWAR PETROLEUM",
+            "station": "RAMESHWAR PETROLEUM",
+            "bl_code": 2006065,
+            "eo": "Vasa Nagamallik",
+            "so": "Vinit S",
+            "ocpp": "BP-ST-DC-60-KA-01680",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "60.0 kW",
+            "type": "FAME",
+            "status": "Online"
+        },
+        {
+            "name": "VINAYAK PETROL PUMP - EV DC Charger 30Kw",
+            "station": "VINAYAK PETROL PUMP",
+            "bl_code": 2006172,
+            "eo": "Vasa Nagamallik",
+            "so": "Jaydip C",
+            "ocpp": "BP-ST-DC-30-KA-01787",
+            "city": "Belgaum",
+            "state": "Karnataka",
+            "power": "30.0 kW",
+            "type": "NON FAME",
+            "status": "Online"
+        }
+    ]
+}
+</script>
+
+    <script>
+        // Custom Plugin to draw background tracks and white circular slider-handles for vertical bars
+        const bentoPillBarPlugin = {
+            id: 'bentoPillBar',
+            // Draw background track behind the bars (only for bar charts)
+            beforeDatasetsDraw(chart, args, options) {
+                const { ctx, scales } = chart;
+                if (!scales || !scales.y) return; // Skip if not a bar chart
+                
+                const yScale = scales.y;
+                const topY = yScale.top;
+                const bottomY = yScale.bottom;
+                
+                chart.data.datasets.forEach((dataset, datasetIndex) => {
+                    const meta = chart.getDatasetMeta(datasetIndex);
+                    if (meta.hidden) return;
+                    meta.data.forEach((bar) => {
+                        const { x, width } = bar;
+                        ctx.save();
+                        ctx.fillStyle = '#f1f5f9'; // Light grey track background
+                        ctx.beginPath();
+                        const radius = width / 2;
+                        // Draw vertical pill track
+                        ctx.roundRect(x - radius, topY, width, bottomY - topY, radius);
+                        ctx.fill();
+                        ctx.restore();
+                    });
+                });
+            },
+            // Draw white dots on top end of vertical bars (only for bar charts)
+            afterDatasetsDraw(chart, args, options) {
+                const { ctx, scales } = chart;
+                if (!scales || !scales.y) return; // Skip if not a bar chart
+                
+                chart.data.datasets.forEach((dataset, datasetIndex) => {
+                    const meta = chart.getDatasetMeta(datasetIndex);
+                    if (meta.hidden) return;
+                    meta.data.forEach((bar, index) => {
+                        const { x, y, width } = bar;
+                        const val = dataset.data[index];
+                        if (val === 0) return;
+                        
+                        ctx.save();
+                        ctx.beginPath();
+                        // Draw white circular slider dot (larger fixed radius to fit numbers)
+                        const circleRadius = 11;
+                        ctx.arc(x, y, circleRadius, 0, 2 * Math.PI);
+                        ctx.fillStyle = '#ffffff';
+                        ctx.shadowColor = 'rgba(0, 0, 0, 0.25)';
+                        ctx.shadowBlur = 4;
+                        ctx.shadowOffsetY = 2;
+                        ctx.fill();
+                        
+                        // Draw the number value inside the white circle
+                        ctx.fillStyle = '#1e293b'; // Slate dark grey text color
+                        ctx.font = 'bold 9px Outfit';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText(val, x, y + 0.5);
+                        ctx.restore();
+                    });
+                });
+            }
+        };
+
+        // Register custom plugin globally
+        Chart.register(bentoPillBarPlugin);
+
+        // Read data injected by script
+        let dataElement = document.getElementById('dashboard-data');
+        let rawData = { chargers: [] };
+        try {
+            rawData = JSON.parse(dataElement.textContent);
+        } catch(e) {
+            console.error("Failed to parse injected data", e);
+        }
+
+        let chargers = rawData.chargers || [];
+        document.getElementById('last-updated').textContent = "Last Updated: " + (rawData.last_updated || "N/A");
+        document.getElementById('stat-file-name').textContent = "Source: " + (rawData.file_name || "N/A");
+
+        // Calculations
+        const total = chargers.length;
+        const online = chargers.filter(c => c.status === "Online").length;
+        const offline = chargers.filter(c => c.status === "Offline").length;
+        
+        // FAME
+        const fame = chargers.filter(c => c.type === "FAME").length;
+        const fameOnline = chargers.filter(c => c.type === "FAME" && c.status === "Online").length;
+        const fameOffline = chargers.filter(c => c.type === "FAME" && c.status === "Offline").length;
+
+        // NON FAME
+        const nonFame = chargers.filter(c => c.type === "NON FAME").length;
+        const nonFameOnline = chargers.filter(c => c.type === "NON FAME" && c.status === "Online").length;
+        const nonFameOffline = chargers.filter(c => c.type === "NON FAME" && c.status === "Offline").length;
+
+        // Update stats cards
+        document.getElementById('stat-total').textContent = total;
+        document.getElementById('stat-online').textContent = online;
+        document.getElementById('stat-offline').textContent = offline;
+        document.getElementById('stat-fame').textContent = fame;
+        document.getElementById('stat-non-fame').textContent = nonFame;
+
+        if (total > 0) {
+            document.getElementById('stat-online-pct').textContent = ((online / total) * 100).toFixed(1) + "% of total";
+            document.getElementById('stat-offline-pct').textContent = ((offline / total) * 100).toFixed(1) + "% of total";
+        }
+        document.getElementById('stat-fame-online').textContent = `${fameOnline} Online / ${fameOffline} Offline`;
+        document.getElementById('stat-non-fame-online').textContent = `${nonFameOnline} Online / ${nonFameOffline} Offline`;
+
+        // Render Dropdown Territory EOs dynamically
+        const zonalLeads = [...new Set(chargers.map(c => c.eo).filter(Boolean))];
+        const leadFilter = document.getElementById('filter-lead');
+        zonalLeads.sort().forEach(lead => {
+            let opt = document.createElement('option');
+            opt.value = lead;
+            opt.textContent = lead;
+            leadFilter.appendChild(opt);
+        });
+
+        // Render Dropdown Sales Officers dynamically
+        const soLeads = [...new Set(chargers.map(c => c.so).filter(Boolean))];
+        const soFilter = document.getElementById('filter-so');
+        soLeads.sort().forEach(so => {
+            let opt = document.createElement('option');
+            opt.value = so;
+            opt.textContent = so;
+            soFilter.appendChild(opt);
+        });
+
+        // Chart 1: Ratio Doughnut Chart
+        const ratioCtx = document.getElementById('ratioChart').getContext('2d');
+        const ratioChart = new Chart(ratioCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Online', 'Offline'],
+                datasets: [{
+                    data: [online, offline],
+                    backgroundColor: ['#10b981', '#ef4444'],
+                    borderColor: '#ffffff',
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { color: '#0f172a', font: { family: 'Outfit', size: 12, weight: 'bold' } }
+                    }
+                }
+            }
+        });
+
+        // Chart 2: Zonal Bar Chart (Territory EO)
+        const leadStats = {};
+        chargers.forEach(c => {
+            if (!c.eo) return;
+            if (!leadStats[c.eo]) leadStats[c.eo] = { online: 0, offline: 0 };
+            if (c.status === "Online") leadStats[c.eo].online++;
+            else if (c.status === "Offline") leadStats[c.eo].offline++;
+        });
+
+        const leadNames = Object.keys(leadStats).sort();
+        const leadOnlineData = leadNames.map(name => leadStats[name].online);
+        const leadOfflineData = leadNames.map(name => leadStats[name].offline);
+
+        const zonalCtx = document.getElementById('zonalChart').getContext('2d');
+        const zonalChart = new Chart(zonalCtx, {
+            type: 'bar',
+            data: {
+                labels: leadNames,
+                datasets: [
+                    {
+                        label: 'Online',
+                        data: leadOnlineData,
+                        backgroundColor: '#10b981',
+                        borderRadius: 50,
+                        borderSkipped: false
+                    },
+                    {
+                        label: 'Offline',
+                        data: leadOfflineData,
+                        backgroundColor: '#ef4444',
+                        borderRadius: 50,
+                        borderSkipped: false
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                barPercentage: 0.5,
+                categoryPercentage: 0.75,
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: '#475569', font: { family: 'Outfit', size: 9, weight: 'bold' }, maxRotation: 45, minRotation: 45 }
+                    },
+                    y: {
+                        grid: { color: 'rgba(0, 0, 0, 0.05)' },
+                        ticks: { color: '#475569', font: { family: 'Outfit', weight: 'bold' } }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: { color: '#0f172a', font: { family: 'Outfit', size: 12, weight: 'bold' } }
+                    }
+                }
+            }
+        });
+
+        // Chart 3: Sales Officers Chart
+        const soStats = {};
+        chargers.forEach(c => {
+            if (!c.so) return;
+            if (!soStats[c.so]) soStats[c.so] = { online: 0, offline: 0 };
+            if (c.status === "Online") soStats[c.so].online++;
+            else if (c.status === "Offline") soStats[c.so].offline++;
+        });
+
+        const soNames = Object.keys(soStats).sort();
+        const soOnlineData = soNames.map(name => soStats[name].online);
+        const soOfflineData = soNames.map(name => soStats[name].offline);
+
+        const soCtx = document.getElementById('salesOfficerChart').getContext('2d');
+        const salesOfficerChart = new Chart(soCtx, {
+            type: 'bar',
+            data: {
+                labels: soNames,
+                datasets: [
+                    {
+                        label: 'Online',
+                        data: soOnlineData,
+                        backgroundColor: '#10b981',
+                        borderRadius: 50,
+                        borderSkipped: false
+                    },
+                    {
+                        label: 'Offline',
+                        data: soOfflineData,
+                        backgroundColor: '#ef4444',
+                        borderRadius: 50,
+                        borderSkipped: false
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                barPercentage: 0.5,
+                categoryPercentage: 0.75,
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: '#475569', font: { family: 'Outfit', size: 9, weight: 'bold' }, maxRotation: 45, minRotation: 45 }
+                    },
+                    y: {
+                        grid: { color: 'rgba(0, 0, 0, 0.05)' },
+                        ticks: { color: '#475569', font: { family: 'Outfit', weight: 'bold' } }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: { color: '#0f172a', font: { family: 'Outfit', size: 12, weight: 'bold' } }
+                    }
+                }
+            }
+        });
+
+        // Render Table & Interactive Filters
+        const tableBody = document.getElementById('table-body');
+        const searchInput = document.getElementById('search-input');
+        const statusFilter = document.getElementById('filter-status');
+        const typeFilter = document.getElementById('filter-type');
+
+        let filteredChargersList = [];
+
+        function renderTable() {
+            const query = searchInput.value.toLowerCase().trim();
+            const statusVal = statusFilter.value;
+            const leadVal = leadFilter.value;
+            const soVal = soFilter.value;
+            const typeVal = typeFilter.value;
+
+            filteredChargersList = chargers.filter(c => {
+                const matchesSearch = 
+                    (c.station || '').toLowerCase().includes(query) ||
+                    (c.ocpp || '').toLowerCase().includes(query) ||
+                    (c.city || '').toLowerCase().includes(query) ||
+                    (c.so || '').toLowerCase().includes(query) ||
+                    (c.eo || '').toLowerCase().includes(query);
+
+                const matchesStatus = statusVal === 'all' || c.status === statusVal;
+                const matchesLead = leadVal === 'all' || c.eo === leadVal;
+                const matchesSo = soVal === 'all' || c.so === soVal;
+                const matchesType = typeVal === 'all' || c.type === typeVal;
+
+                return matchesSearch && matchesStatus && matchesLead && matchesSo && matchesType;
+            });
+
+            tableBody.innerHTML = '';
+            if (filteredChargersList.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="10" style="text-align: center; padding: 2rem; color: var(--text-muted);">No matching chargers found.</td></tr>`;
+                return;
+            }
+
+            filteredChargersList.forEach((c, idx) => {
+                const tr = document.createElement('tr');
+                const statusClass = (c.status || '').toLowerCase() === 'online' ? 'online' : 'offline';
+
+                tr.innerHTML = `
+                    <td>${idx + 1}</td>
+                    <td style="font-weight: 600; color: #0f172a;">${c.station || '-'}</td>
+                    <td>${c.bl_code || '-'}</td>
+                    <td>${c.ocpp || '-'}</td>
+                    <td>${c.eo || '-'}</td>
+                    <td>${c.so || '-'}</td>
+                    <td>${c.power || '-'}</td>
+                    <td>${c.city || '-'}, ${c.state || '-'}</td>
+                    <td>${c.type || '-'}</td>
+                    <td>
+                        <span class="status-badge ${statusClass}">
+                            <span class="status-dot"></span>
+                            ${c.status || 'Offline'}
+                        </span>
+                    </td>
+                `;
+                tableBody.appendChild(tr);
+            });
+        }
+
+        // SheetJS Download Action
+        function downloadExcel() {
+            if (filteredChargersList.length === 0) {
+                alert("No data available to download.");
+                return;
+            }
+            
+            // Format list details specifically for excel headers
+            const formatted = filteredChargersList.map((c, index) => ({
+                "S.No": index + 1,
+                "Station Name": c.station || '',
+                "BL Code": c.bl_code || '',
+                "OCPP ID": c.ocpp || '',
+                "Territory EO": c.eo || '',
+                "Sales Officer": c.so || '',
+                "Power Rating": c.power || '',
+                "City": c.city || '',
+                "State": c.state || '',
+                "Type": c.type || '',
+                "Status": c.status || 'Offline'
+            }));
+            
+            const worksheet = XLSX.utils.json_to_sheet(formatted);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Charger Status");
+            
+            // Generate filename with date
+            const dateStr = new Date().toISOString().slice(0, 10);
+            XLSX.writeFile(workbook, `EVCS_Chargers_Status_${dateStr}.xlsx`);
+        }
+
+        // Add filter listeners
+        searchInput.addEventListener('input', renderTable);
+        statusFilter.addEventListener('change', renderTable);
+        leadFilter.addEventListener('change', renderTable);
+        soFilter.addEventListener('change', renderTable);
+        typeFilter.addEventListener('change', renderTable);
+
+        // Initial table load
+        renderTable();
+    </script>
+</body>
+</html>
